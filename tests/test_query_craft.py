@@ -1,44 +1,101 @@
-from query_craft import QueryCraft, Query
 import pytest
+from query_craft import ScheduleConfig, EmailSender, process_execution
 
-def test_list_queries():
-    craft = QueryCraft()
-    queries = craft.list_queries()
-    assert len(queries) == 1
-    assert queries[0] == "example_query"
 
-def test_get_query():
-    craft = QueryCraft()
-    query = craft.get_query("example_query")
-    assert query.name == "example_query"
-    assert query.parameter_schema == {"param1": "str", "param2": "int"}
+def test_process_execution_failure_alerts_enabled():
+    config = ScheduleConfig(
+        schedule_id="daily_sync",
+        owner_email="owner@example.com",
+        admin_emails=["admin1@example.com", "admin2@example.com"],
+        alerts_enabled=True,
+    )
+    sender = EmailSender()
 
-def test_run_query():
-    craft = QueryCraft()
-    result = craft.run_query("example_query", {"param1": "hello", "param2": "42"})
-    assert result == {"result1": "hello - 42", "result2": 42}
+    sent = process_execution(
+        schedule_config=config,
+        success=False,
+        error_message="Connection lost",
+        log_url="https://logs.example.com/run/42",
+        email_sender=sender,
+    )
 
-def test_render_query_form():
-    craft = QueryCraft()
-    form = craft.render_query_form("example_query")
-    assert "<form>" in form
-    assert "<label>param1 (str)</label>" in form
-    assert "<label>param2 (int)</label>" in form
+    # Email should have been sent
+    assert sent is True
+    assert len(sender.sent) == 1
+    email = sender.sent[0]
+    # Recipients include owner and all admins
+    assert email["to"] == ["owner@example.com", "admin1@example.com", "admin2@example.com"]
+    # Subject contains schedule id
+    assert "daily_sync" in email["subject"]
+    # Body contains error message and log URL
+    assert "Connection lost" in email["body"]
+    assert "https://logs.example.com/run/42" in email["body"]
 
-def test_render_query_results():
-    craft = QueryCraft()
-    result = {"result1": "hello - 42", "result2": 42}
-    table = craft.render_query_results("example_query", result)
-    assert "<h2>example_query Results</h2>" in table
-    assert "<th>result1</th><td>hello - 42</td>" in table
-    assert "<th>result2</th><td>42</td>" in table
 
-def test_get_query_not_found():
-    craft = QueryCraft()
-    query = craft.get_query("non_existent_query")
-    assert query is None
+def test_process_execution_failure_alerts_disabled():
+    config = ScheduleConfig(
+        schedule_id="hourly_job",
+        owner_email="owner@example.com",
+        admin_emails=["admin@example.com"],
+        alerts_enabled=False,
+    )
+    sender = EmailSender()
 
-def test_run_query_not_found():
-    craft = QueryCraft()
-    result = craft.run_query("non_existent_query", {"param1": "hello", "param2": "42"})
-    assert result is None
+    sent = process_execution(
+        schedule_config=config,
+        success=False,
+        error_message="Timeout",
+        log_url="https://logs.example.com/run/99",
+        email_sender=sender,
+    )
+
+    # No email should be sent when alerts are disabled
+    assert sent is False
+    assert sender.sent == []
+
+
+def test_process_execution_success_no_email():
+    config = ScheduleConfig(
+        schedule_id="weekly_report",
+        owner_email="owner@example.com",
+        admin_emails=[],
+        alerts_enabled=True,
+    )
+    sender = EmailSender()
+
+    sent = process_execution(
+        schedule_config=config,
+        success=True,
+        error_message=None,
+        log_url="https://logs.example.com/run/123",
+        email_sender=sender,
+    )
+
+    # Successful runs never trigger an email
+    assert sent is False
+    assert sender.sent == []
+
+
+def test_process_execution_missing_error_message():
+    """Edge case where the failure provides no error message."""
+    config = ScheduleConfig(
+        schedule_id="nightly_etl",
+        owner_email="owner@example.com",
+        admin_emails=[],
+        alerts_enabled=True,
+    )
+    sender = EmailSender()
+
+    sent = process_execution(
+        schedule_config=config,
+        success=False,
+        error_message=None,
+        log_url="https://logs.example.com/run/777",
+        email_sender=sender,
+    )
+
+    assert sent is True
+    email = sender.sent[0]
+    # Body should contain placeholder for missing error message
+    assert "<no error message>" in email["body"]
+    assert "https://logs.example.com/run/777" in email["body"]

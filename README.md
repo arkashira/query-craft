@@ -1,12 +1,12 @@
-# Query Craft
+# query-craft
 
-A simple web form to input parameters for a specific query.
+A tiny library that helps a data engineer get notified when a scheduled run fails.
 
-## Usage
+## Features
 
-1. Run the application using `python -m query_craft`.
-2. Open a web browser and navigate to `http://localhost:8000`.
-3. Select a query from the list.
-4. Fill in the input fields based on the query's parameter schema.
-5. Click the "Run" button to execute the query.
-6. View the results in a simple HTML table.
+- Define a schedule configuration (owner, admins, alerts on/off).
+- Process an execution result and automatically send an email when it fails.
+- Email sending is abstracted via an in‑memory `EmailSender` so the library works
+  without external services (perfect for unit testing).
+
+## Quick start

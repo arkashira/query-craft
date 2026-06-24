@@ -1,49 +1,95 @@
-from dataclasses import dataclass
+from __future__ import annotations
+
+from dataclasses import dataclass, field
 from typing import List, Dict
-import json
+
 
 @dataclass
-class Query:
-    name: str
-    parameter_schema: Dict[str, str]
-    result_schema: Dict[str, str]
+class ScheduleConfig:
+    """Configuration for a single schedule."""
+    schedule_id: str
+    owner_email: str
+    admin_emails: List[str] = field(default_factory=list)
+    alerts_enabled: bool = True
 
-class QueryCraft:
-    def __init__(self):
-        self.queries = [
-            Query("example_query", {"param1": "str", "param2": "int"}, {"result1": "str", "result2": "int"}),
-        ]
 
-    def list_queries(self):
-        return [query.name for query in self.queries]
+class EmailSender:
+    """
+    Very small email abstraction that records sent messages in memory.
+    In production this could be swapped with a real SMTP client.
+    """
 
-    def get_query(self, query_name):
-        for query in self.queries:
-            if query.name == query_name:
-                return query
-        return None
+    def __init__(self) -> None:
+        self.sent: List[Dict[str, object]] = []
 
-    def run_query(self, query_name, params):
-        query = self.get_query(query_name)
-        if query:
-            # Simulate running the query
-            result = {"result1": f"{params['param1']} - {params['param2']}", "result2": 42}
-            return result
-        return None
+    def send(self, to: List[str], subject: str, body: str) -> None:
+        """
+        Record an email that would have been sent.
 
-    def render_query_form(self, query_name):
-        query = self.get_query(query_name)
-        if query:
-            form = f"<form><h2>{query_name}</h2>"
-            for param, param_type in query.parameter_schema.items():
-                form += f"<label>{param} ({param_type})</label><br><input type='text' name='{param}'><br>"
-            form += "<input type='submit' value='Run'>"
-            return form
-        return None
+        Args:
+            to: List of recipient email addresses.
+            subject: Email subject line.
+            body: Full email body.
+        """
+        self.sent.append({
+            "to": to,
+            "subject": subject,
+            "body": body,
+        })
 
-    def render_query_results(self, query_name, result):
-        table = f"<h2>{query_name} Results</h2><table border='1'>"
-        for key, value in result.items():
-            table += f"<tr><th>{key}</th><td>{value}</td></tr>"
-        table += "</table>"
-        return table
+
+def _compose_subject(schedule_id: str) -> str:
+    """Create a subject line for a failed execution."""
+    return f"Execution failed for schedule '{schedule_id}'"
+
+
+def _compose_body(error_message: str | None, log_url: str) -> str:
+    """Create the email body containing the error and a link to logs."""
+    error_part = error_message or "<no error message>"
+    return f"""The scheduled execution has failed.
+
+Error:
+{error_part}
+
+Log details: {log_url}
+"""
+
+
+def process_execution(
+    schedule_config: ScheduleConfig,
+    *,
+    success: bool,
+    error_message: str | None,
+    log_url: str,
+    email_sender: EmailSender,
+) -> bool:
+    """
+    Process the result of a scheduled run.
+
+    If the run failed and alerts are enabled, an email is sent to the owner
+    and all admins.
+
+    Args:
+        schedule_config: Configuration for the schedule.
+        success: Whether the execution succeeded.
+        error_message: Optional error message from the failure.
+        log_url: URL where the execution log can be inspected.
+        email_sender: Instance used to "send" the email.
+
+    Returns:
+        True if an email was sent, False otherwise.
+    """
+    if success:
+        # No alert needed for successful runs.
+        return False
+
+    if not schedule_config.alerts_enabled:
+        # Alerts are explicitly disabled for this schedule.
+        return False
+
+    subject = _compose_subject(schedule_config.schedule_id)
+    body = _compose_body(error_message, log_url)
+
+    recipients = [schedule_config.owner_email] + schedule_config.admin_emails
+    email_sender.send(to=recipients, subject=subject, body=body)
+    return True
