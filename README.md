@@ -1,12 +1,12 @@
 # Query Craft
-A guided setup wizard for connecting databases and creating templates.
+
+A simple web form to input parameters for a specific query.
 
 ## Usage
-1. Create a new instance of the `QueryCraft` class.
-2. Add a database connection using the `add_database_connection` method.
-3. Add a template using the `add_template` method.
-4. Execute a sample query using the `execute_sample_query` method.
-5. Get tutorial links using the `get_tutorial_links` method.
 
-## Testing
-Run the tests using `pytest`.
+1. Run the application using `python -m query_craft`.
+2. Open a web browser and navigate to `http://localhost:8000`.
+3. Select a query from the list.
+4. Fill in the input fields based on the query's parameter schema.
+5. Click the "Run" button to execute the query.
+6. View the results in a simple HTML table.

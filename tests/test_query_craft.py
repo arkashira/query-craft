@@ -1,68 +1,44 @@
+from query_craft import QueryCraft, Query
 import pytest
-from query_craft import QueryCraft, DatabaseConnection, Template, create_setup_wizard
 
-def test_add_database_connection():
-    query_craft = QueryCraft()
-    connection = DatabaseConnection(
-        host="localhost",
-        username="username",
-        password="password",
-        database="database"
-    )
-    query_craft.add_database_connection(connection)
-    assert len(query_craft.database_connections) == 1
+def test_list_queries():
+    craft = QueryCraft()
+    queries = craft.list_queries()
+    assert len(queries) == 1
+    assert queries[0] == "example_query"
 
-def test_add_template():
-    query_craft = QueryCraft()
-    template = Template(
-        name="template1",
-        query="SELECT * FROM table1"
-    )
-    query_craft.add_template(template)
-    assert len(query_craft.templates) == 1
+def test_get_query():
+    craft = QueryCraft()
+    query = craft.get_query("example_query")
+    assert query.name == "example_query"
+    assert query.parameter_schema == {"param1": "str", "param2": "int"}
 
-def test_execute_sample_query():
-    query_craft = QueryCraft()
-    connection = DatabaseConnection(
-        host="localhost",
-        username="username",
-        password="password",
-        database="database"
-    )
-    query_craft.add_database_connection(connection)
-    template = Template(
-        name="template1",
-        query="SELECT * FROM table1"
-    )
-    query_craft.add_template(template)
-    result = query_craft.execute_sample_query()
-    assert result == "Sample query executed successfully"
+def test_run_query():
+    craft = QueryCraft()
+    result = craft.run_query("example_query", {"param1": "hello", "param2": "42"})
+    assert result == {"result1": "hello - 42", "result2": 42}
 
-def test_execute_sample_query_no_connections():
-    query_craft = QueryCraft()
-    with pytest.raises(ValueError):
-        query_craft.execute_sample_query()
+def test_render_query_form():
+    craft = QueryCraft()
+    form = craft.render_query_form("example_query")
+    assert "<form>" in form
+    assert "<label>param1 (str)</label>" in form
+    assert "<label>param2 (int)</label>" in form
 
-def test_execute_sample_query_no_templates():
-    query_craft = QueryCraft()
-    connection = DatabaseConnection(
-        host="localhost",
-        username="username",
-        password="password",
-        database="database"
-    )
-    query_craft.add_database_connection(connection)
-    with pytest.raises(ValueError):
-        query_craft.execute_sample_query()
+def test_render_query_results():
+    craft = QueryCraft()
+    result = {"result1": "hello - 42", "result2": 42}
+    table = craft.render_query_results("example_query", result)
+    assert "<h2>example_query Results</h2>" in table
+    assert "<th>result1</th><td>hello - 42</td>" in table
+    assert "<th>result2</th><td>42</td>" in table
 
-def test_get_tutorial_links():
-    query_craft = QueryCraft()
-    links = query_craft.get_tutorial_links()
-    assert len(links) == 2
-    assert links[0] == "https://example.com/tutorial1"
-    assert links[1] == "https://example.com/tutorial2"
+def test_get_query_not_found():
+    craft = QueryCraft()
+    query = craft.get_query("non_existent_query")
+    assert query is None
 
-def test_create_setup_wizard():
-    query_craft = create_setup_wizard()
-    assert len(query_craft.database_connections) == 1
-    assert len(query_craft.templates) == 1
+def test_run_query_not_found():
+    craft = QueryCraft()
+    result = craft.run_query("non_existent_query", {"param1": "hello", "param2": "42"})
+    assert result is None
