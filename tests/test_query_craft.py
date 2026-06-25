@@ -1,101 +1,45 @@
-import pytest
-from query_craft import ScheduleConfig, EmailSender, process_execution
+from query_craft import Query, refine_query, generate_query, apply_filters
 
+def test_refine_query():
+    query = Query(columns=["name", "age"], filters={"age": "25"})
+    refined_query = refine_query(query, columns=["name", "email"])
+    assert refined_query.columns == ["name", "email"]
+    assert refined_query.filters == {"age": "25"}
 
-def test_process_execution_failure_alerts_enabled():
-    config = ScheduleConfig(
-        schedule_id="daily_sync",
-        owner_email="owner@example.com",
-        admin_emails=["admin1@example.com", "admin2@example.com"],
-        alerts_enabled=True,
-    )
-    sender = EmailSender()
+def test_refine_query_filters():
+    query = Query(columns=["name", "age"], filters={"age": "25"})
+    refined_query = refine_query(query, filters={"age": "30"})
+    assert refined_query.columns == ["name", "age"]
+    assert refined_query.filters == {"age": "30"}
 
-    sent = process_execution(
-        schedule_config=config,
-        success=False,
-        error_message="Connection lost",
-        log_url="https://logs.example.com/run/42",
-        email_sender=sender,
-    )
+def test_generate_query():
+    query = Query(columns=["name", "age"], filters={"age": "25"})
+    generated_query = generate_query(query)
+    assert generated_query == "SELECT name, age WHERE age = '25'"
 
-    # Email should have been sent
-    assert sent is True
-    assert len(sender.sent) == 1
-    email = sender.sent[0]
-    # Recipients include owner and all admins
-    assert email["to"] == ["owner@example.com", "admin1@example.com", "admin2@example.com"]
-    # Subject contains schedule id
-    assert "daily_sync" in email["subject"]
-    # Body contains error message and log URL
-    assert "Connection lost" in email["body"]
-    assert "https://logs.example.com/run/42" in email["body"]
+def test_generate_query_no_filters():
+    query = Query(columns=["name", "age"], filters={})
+    generated_query = generate_query(query)
+    assert generated_query == "SELECT name, age"
 
+def test_apply_filters():
+    query = Query(columns=["name", "age"], filters={"age": "25"})
+    data = [
+        {"name": "John", "age": "25"},
+        {"name": "Jane", "age": "30"},
+        {"name": "Bob", "age": "25"}
+    ]
+    filtered_data = apply_filters(query, data)
+    assert len(filtered_data) == 2
+    assert filtered_data[0]["name"] == "John"
+    assert filtered_data[1]["name"] == "Bob"
 
-def test_process_execution_failure_alerts_disabled():
-    config = ScheduleConfig(
-        schedule_id="hourly_job",
-        owner_email="owner@example.com",
-        admin_emails=["admin@example.com"],
-        alerts_enabled=False,
-    )
-    sender = EmailSender()
-
-    sent = process_execution(
-        schedule_config=config,
-        success=False,
-        error_message="Timeout",
-        log_url="https://logs.example.com/run/99",
-        email_sender=sender,
-    )
-
-    # No email should be sent when alerts are disabled
-    assert sent is False
-    assert sender.sent == []
-
-
-def test_process_execution_success_no_email():
-    config = ScheduleConfig(
-        schedule_id="weekly_report",
-        owner_email="owner@example.com",
-        admin_emails=[],
-        alerts_enabled=True,
-    )
-    sender = EmailSender()
-
-    sent = process_execution(
-        schedule_config=config,
-        success=True,
-        error_message=None,
-        log_url="https://logs.example.com/run/123",
-        email_sender=sender,
-    )
-
-    # Successful runs never trigger an email
-    assert sent is False
-    assert sender.sent == []
-
-
-def test_process_execution_missing_error_message():
-    """Edge case where the failure provides no error message."""
-    config = ScheduleConfig(
-        schedule_id="nightly_etl",
-        owner_email="owner@example.com",
-        admin_emails=[],
-        alerts_enabled=True,
-    )
-    sender = EmailSender()
-
-    sent = process_execution(
-        schedule_config=config,
-        success=False,
-        error_message=None,
-        log_url="https://logs.example.com/run/777",
-        email_sender=sender,
-    )
-
-    assert sent is True
-    email = sender.sent[0]
-    # Body should contain placeholder for missing error message
-    assert "<no error message>" in email["body"]
-    assert "https://logs.example.com/run/777" in email["body"]
+def test_apply_filters_no_match():
+    query = Query(columns=["name", "age"], filters={"age": "40"})
+    data = [
+        {"name": "John", "age": "25"},
+        {"name": "Jane", "age": "30"},
+        {"name": "Bob", "age": "25"}
+    ]
+    filtered_data = apply_filters(query, data)
+    assert len(filtered_data) == 0
